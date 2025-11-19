@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login - SmartTech</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+  <div class="w-full max-w-md bg-white rounded p-6 shadow">
+    <h1 class="text-xl font-semibold mb-4">Connexion SmartTech</h1>
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm">Utilisateur</label>
+        <input id="username" class="w-full border p-2 rounded" required />
+      </div>
+      <div>
+        <label class="block text-sm">Mot de passe</label>
+        <input id="password" type="password" class="w-full border p-2 rounded" required />
+      </div>
+      <div>
+        <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded">Se connecter</button>
+      </div>
+      <div id="err" class="text-sm text-red-600"></div>
+    </form>
+  </div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  try {
+    const res = await fetch('https://api.smarttech.local/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username:u,password:p})
+    });
+    const j = await res.json();
+    if (res.ok && j.access_token) {
+      localStorage.setItem('st_token', j.access_token);
+      location.href = '/index.html';
+    } else {
+      document.getElementById('err').innerText = j.detail || 'Erreur connexion';
+    }
+  } catch(err) {
+    document.getElementById('err').innerText = 'Impossible de joindre l’API';
+  }
+});
+</script>
+</body>
+</html>

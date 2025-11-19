@@ -1,0 +1,22 @@
+; Reverse zone for 172.20.0.0/24
+$TTL 604800
+@ IN SOA dns.smarttech.local. admin.smarttech.local. (
+    2025010101 ; Serial
+    3600       ; Refresh
+    1800       ; Retry
+    604800     ; Expire
+    86400 )    ; Negative Cache TTL
+
+; Name Server
+@ IN NS dns.smarttech.local.
+
+; PTR Records
+10 IN PTR dns.smarttech.local.
+11 IN PTR ftp.smarttech.local.
+12 IN PTR ssh.smarttech.local.
+13 IN PTR sip.smarttech.local.
+14 IN PTR mail.smarttech.local.
+15 IN PTR novnc.smarttech.local.
+5  IN PTR traefik.smarttech.local.
+16 IN PTR smb.smarttech.local.
+17 IN PTR api.smarttech.local.

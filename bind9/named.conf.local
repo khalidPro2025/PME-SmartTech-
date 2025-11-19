@@ -1,0 +1,31 @@
+// Configuration principale Bind9
+options {
+    directory "/var/cache/bind";
+    forwarders {
+        8.8.8.8;
+        1.1.1.1;
+    };
+    dnssec-validation auto;
+    listen-on { any; };
+    listen-on-v6 { any; };
+    allow-query { any; };
+    recursion yes;
+};
+
+// Zone forward smarttech.local
+zone "smarttech.local" {
+    type master;
+    file "/etc/bind/zones/db.smarttech.local";
+};
+
+// Zone reverse 172.20.0.0
+zone "0.20.172.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.172.20.0";
+};
+
+// Zone reverse 172.21.0.0
+zone "0.21.172.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.172.21.0";
+};

@@ -1,0 +1,308 @@
+version: "3.8"
+
+# =========================
+#   NETWORKS
+# =========================
+networks:
+  services:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  clients:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+
+# =========================
+#   VOLUMES
+# =========================
+volumes:
+  bind9_data:
+  ftp_data:
+  ssh_data:
+  asterisk_data:
+  asterisk_spool:
+  asterisk_logs:
+  mail_data:
+  novnc_data:
+  shared_data:
+  samba_data:
+  fastapi_data:
+  traefik_data:
+
+# =========================
+#   SERVICES
+# =========================
+services:
+
+  # -------------------------------------
+  # Traefik - Reverse Proxy + HTTPS
+  # -------------------------------------
+  traefik:
+    image: traefik:v2.10
+    container_name: smarttech_traefik
+    hostname: traefik.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=admin@smarttech.local
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    networks:
+      services:
+        ipv4_address: 172.20.0.5
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/acme.json:/letsencrypt/acme.json
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml
+    restart: unless-stopped
+
+  # -------------------------------------
+  # DNS - Bind9
+  # -------------------------------------
+  bind9:
+    image: internetsystemsconsortium/bind9:9.18
+    container_name: smarttech_bind9
+    hostname: dns.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ./bind9/named.conf.local:/etc/bind/named.conf.local:ro
+      - ./bind9/zones:/etc/bind/zones:ro
+      - bind9_data:/var/cache/bind
+    networks:
+      services:
+        ipv4_address: 172.20.0.10
+      clients:
+        ipv4_address: 172.21.0.10
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # FTP - vsftpd
+  # -------------------------------------
+  ftp:
+    build: ./ftp
+    container_name: smarttech_ftp
+    hostname: ftp.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+      - FTP_USER=ftpuser
+      - FTP_PASS=ftpPass123!
+    volumes:
+      - ftp_data:/home/ftpuser/ftp
+      - shared_data:/shared
+      - ./ftp/vsftpd.conf:/etc/vsftpd.conf:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ftp.rule=Host(`ftp.smarttech.local`)"
+      - "traefik.http.routers.ftp.entrypoints=websecure"
+      - "traefik.http.routers.ftp.tls.certresolver=le"
+    networks:
+      services:
+        ipv4_address: 172.20.0.11
+    ports:
+      - "21:21"
+      - "30000-30010:30000-30010"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # SSH
+  # -------------------------------------
+  ssh:
+    build: ./ssh
+    container_name: smarttech_ssh
+    hostname: ssh.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ssh_data:/home/sshuser
+      - shared_data:/shared
+      - ./ssh/sshd_config:/etc/ssh/sshd_config:ro
+    networks:
+      services:
+        ipv4_address: 172.20.0.12
+    ports:
+      - "2222:22"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # Asterisk (ToIP)
+  # -------------------------------------
+  asterisk:
+    image: andrius/asterisk:latest
+    container_name: smarttech_asterisk
+    hostname: sip.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - asterisk_data:/etc/asterisk
+      - asterisk_spool:/var/spool/asterisk
+      - asterisk_logs:/var/log/asterisk
+      - ./asterisk/sip.conf:/etc/asterisk/sip.conf:ro
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk/users.conf:/etc/asterisk/users.conf:ro
+    networks:
+      services:
+        ipv4_address: 172.20.0.13
+      clients:
+        ipv4_address: 172.21.0.13
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10100:10000-10100/udp"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # Mail - MailServer
+  # -------------------------------------
+  mail:
+    image: mailserver/docker-mailserver:latest
+    container_name: smarttech_mail
+    hostname: mail.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+      - ENABLE_SPAMASSASSIN=1
+      - ENABLE_CLAMAV=1
+      - ENABLE_FAIL2BAN=1
+      - ONE_DIR=1
+      - PERMIT_DOCKER=host
+      - SSL_TYPE=self-signed
+    volumes:
+      - mail_data:/var/mail
+      - shared_data:/shared
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mail.rule=Host(`mail.smarttech.local`)"
+      - "traefik.http.routers.mail.entrypoints=websecure"
+      - "traefik.http.routers.mail.tls.certresolver=le"
+    networks:
+      services:
+        ipv4_address: 172.20.0.14
+    ports:
+      - "25:25"
+      - "587:587"
+      - "993:993"
+      - "143:143"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # NoVNC
+  # -------------------------------------
+  novnc:
+    build: ./novnc
+    container_name: smarttech_novnc
+    hostname: novnc.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+      - VNC_PASSWORD=vncPass123!
+    volumes:
+      - novnc_data:/home/ubuntu
+      - shared_data:/shared
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.novnc.rule=Host(`vnc.smarttech.local`)"
+      - "traefik.http.routers.novnc.entrypoints=websecure"
+      - "traefik.http.routers.novnc.tls.certresolver=le"
+    networks:
+      services:
+        ipv4_address: 172.20.0.15
+    ports:
+      - "6080:80"
+      - "5900:5900"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # FastAPI - API SmartTech
+  # -------------------------------------
+  fastapi:
+    build: ./fastapi
+    container_name: smarttech_fastapi
+    hostname: api.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ./fastapi:/app
+      - fastapi_data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.smarttech.local`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=le"
+      - "traefik.http.services.api.loadbalancer.server.port=8000"
+    networks:
+      services:
+        ipv4_address: 172.20.0.17
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # Samba - SMB
+  # -------------------------------------
+  samba:
+    image: dperson/samba
+    container_name: smarttech_samba
+    hostname: smb.smarttech.local
+    environment:
+      - TZ:Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    command: >
+      -u "smbuser;smbPass123!"
+      -s "shared;/shared;yes;no;yes;all"
+    volumes:
+      - shared_data:/shared
+    networks:
+      services:
+        ipv4_address: 172.20.0.16
+    ports:
+      - "445:445"
+      - "139:139"
+    restart: unless-stopped
+
+  # -------------------------------------
+  # PORTAL - Web Tailwind + Nginx
+  # -------------------------------------
+  portal:
+    build: ./portal
+    container_name: smarttech_portal
+    hostname: portal.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ./portal/index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portal.rule=Host(`portal.smarttech.local`)"
+      - "traefik.http.routers.portal.entrypoints=websecure"
+      - "traefik.http.routers.portal.tls.certresolver=le"
+      - "traefik.http.services.portal.loadbalancer.server.port=80"
+    networks:
+      services:
+        ipv4_address: 172.20.0.18
+    ports:
+      - "8081:80"
+    restart: unless-stopped

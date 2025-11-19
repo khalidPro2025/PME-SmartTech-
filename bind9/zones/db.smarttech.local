@@ -1,0 +1,29 @@
+; Zone file for smarttech.local
+$TTL    604800
+@       IN      SOA     dns.smarttech.local. admin.smarttech.local. (
+                        2025010101 ; Serial
+                        3600       ; Refresh
+                        1800       ; Retry
+                        604800     ; Expire
+                        86400 )    ; Negative Cache TTL
+
+; Name Servers
+@       IN      NS      dns.smarttech.local.
+
+; A Records
+dns       IN      A       172.20.0.10
+ftp       IN      A       172.20.0.11
+ssh       IN      A       172.20.0.12
+sip       IN      A       172.20.0.13
+mail      IN      A       172.20.0.14
+novnc     IN      A       172.20.0.15
+traefik   IN      A       172.20.0.5
+smb       IN      A       172.20.0.16
+api       IN      A       172.20.0.17
+
+; MX Record
+@       IN      MX 10   mail.smarttech.local.
+
+; CNAME Records
+www     IN      CNAME   novnc.smarttech.local.
+web     IN      CNAME   novnc.smarttech.local.

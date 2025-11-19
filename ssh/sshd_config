@@ -1,0 +1,28 @@
+Port 22
+Protocol 2
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_dsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+# Authentication
+PermitRootLogin no
+PasswordAuthentication yes
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+
+# Options utilisateur
+AllowUsers sshuser
+X11Forwarding yes
+PrintMotd yes
+PrintLastLog yes
+TCPKeepAlive yes
+
+# Security
+UsePAM yes
+ClientAliveInterval 300
+ClientAliveCountMax 2
+MaxAuthTries 3
+MaxSessions 10
+
+Subsystem sftp /usr/lib/openssh/sftp-server
