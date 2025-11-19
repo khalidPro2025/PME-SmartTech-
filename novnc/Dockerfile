@@ -1,36 +1,36 @@
 FROM ubuntu:22.04
 
-# --------------------------------------------------
-# Désactiver les interactions + définir le timezone
-# --------------------------------------------------
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Africa/Dakar
 
-# Fix timezone pour éviter les prompts bloquants
 RUN ln -fs /usr/share/zoneinfo/Africa/Dakar /etc/localtime && \
     apt-get update && \
-    apt-get install -y tzdata && \
-    dpkg-reconfigure --frontend noninteractive tzdata
+    apt-get install -y tzdata
 
 # --------------------------------------------------
-# Installation de l’environnement graphique + outils
+# INSTALLATION COMPONENTS
 # --------------------------------------------------
 RUN apt-get update && apt-get install -y \
     xfce4 \
-    xfce4-goodies \
+    xfce4-terminal \
     x11vnc \
     novnc \
     websockify \
     firefox \
+    xvfb \
+    dbus-x11 \
     net-tools \
-    iputils-ping \
     curl \
     wget \
-    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------------------------
-# Création de l’utilisateur
+# DISABLE UPOWER + POWER MANAGER
+# --------------------------------------------------
+RUN apt-get remove -y upower xfce4-power-manager || true
+
+# --------------------------------------------------
+# CREATE USER
 # --------------------------------------------------
 RUN useradd -m -s /bin/bash ubuntu && \
     echo "ubuntu:ubuntu" | chpasswd && \
@@ -38,21 +38,15 @@ RUN useradd -m -s /bin/bash ubuntu && \
     chown ubuntu:ubuntu /home/ubuntu
 
 # --------------------------------------------------
-# Configuration du mot de passe VNC
+# VNC PASSWORD
 # --------------------------------------------------
 RUN mkdir -p /home/ubuntu/.vnc && \
     x11vnc -storepasswd "vncPass123!" /home/ubuntu/.vnc/passwd && \
     chown -R ubuntu:ubuntu /home/ubuntu/.vnc
 
-# --------------------------------------------------
-# Script de démarrage
-# --------------------------------------------------
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
-# --------------------------------------------------
-# Ports
-# --------------------------------------------------
 EXPOSE 5900 6080
 
 CMD ["/usr/local/bin/start.sh"]
