@@ -1,23 +1,18 @@
 version: "3.8"
 
-# =========================
-#   NETWORKS
-# =========================
 networks:
   services:
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/24
+
   clients:
     driver: bridge
     ipam:
       config:
         - subnet: 172.21.0.0/24
 
-# =========================
-#   VOLUMES
-# =========================
 volumes:
   bind9_data:
   ftp_data:
@@ -32,54 +27,40 @@ volumes:
   fastapi_data:
   traefik_data:
 
-# =========================
-#   SERVICES
-# =========================
 services:
 
-  # -------------------------------------
-  # Traefik - Reverse Proxy + HTTPS
-  # -------------------------------------
   traefik:
     image: traefik:v2.10
     container_name: smarttech_traefik
     hostname: traefik.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
-    command:
-      - --api.dashboard=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.le.acme.email=admin@smarttech.local
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
-      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/acme.json:/letsencrypt/acme.json
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik_data:/letsencrypt
+    networks:
+      services:
+        ipv4_address: 172.20.0.5
     ports:
       - "80:80"
       - "443:443"
       - "8080:8080"
-    networks:
-      services:
-        ipv4_address: 172.20.0.5
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/acme.json:/letsencrypt/acme.json
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--timeout=2", "-q", "http://127.0.0.1:8080/ping" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
-  # -------------------------------------
-  # DNS - Bind9
-  # -------------------------------------
   bind9:
     image: internetsystemsconsortium/bind9:9.18
     container_name: smarttech_bind9
     hostname: dns.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
     volumes:
       - ./bind9/named.conf.local:/etc/bind/named.conf.local:ro
       - ./bind9/zones:/etc/bind/zones:ro
@@ -90,20 +71,21 @@ services:
       clients:
         ipv4_address: 172.21.0.10
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      - "1053:53/udp"
+      - "1053:53/tcp"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "portal.smarttech.local", "A", "+short"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # FTP - vsftpd
-  # -------------------------------------
   ftp:
     build: ./ftp
     container_name: smarttech_ftp
     hostname: ftp.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
       - FTP_USER=ftpuser
       - FTP_PASS=ftpPass123!
     volumes:
@@ -122,17 +104,18 @@ services:
       - "21:21"
       - "30000-30010:30000-30010"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "nc -zv 127.0.0.1 21 >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # SSH
-  # -------------------------------------
   ssh:
     build: ./ssh
     container_name: smarttech_ssh
     hostname: ssh.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
     volumes:
       - ssh_data:/home/sshuser
       - shared_data:/shared
@@ -143,17 +126,18 @@ services:
     ports:
       - "2222:22"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "ss -tnlp | grep :22 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # Asterisk (ToIP)
-  # -------------------------------------
   asterisk:
     image: andrius/asterisk:latest
     container_name: smarttech_asterisk
     hostname: sip.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
     volumes:
       - asterisk_data:/etc/asterisk
       - asterisk_spool:/var/spool/asterisk
@@ -171,17 +155,18 @@ services:
       - "5060:5060/tcp"
       - "10000-10100:10000-10100/udp"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "asterisk -rx 'core show channels' >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # -------------------------------------
-  # Mail - MailServer
-  # -------------------------------------
   mail:
     image: mailserver/docker-mailserver:latest
     container_name: smarttech_mail
     hostname: mail.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
       - ENABLE_SPAMASSASSIN=1
       - ENABLE_CLAMAV=1
       - ENABLE_FAIL2BAN=1
@@ -191,6 +176,7 @@ services:
     volumes:
       - mail_data:/var/mail
       - shared_data:/shared
+      - ./mail/config/:/tmp/docker-mailserver/:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mail.rule=Host(`mail.smarttech.local`)"
@@ -205,18 +191,20 @@ services:
       - "993:993"
       - "143:143"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "nc -z 127.0.0.1 25 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # NoVNC
-  # -------------------------------------
   novnc:
     build: ./novnc
     container_name: smarttech_novnc
     hostname: novnc.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
       - VNC_PASSWORD=vncPass123!
+      - DISPLAY=:0
     volumes:
       - novnc_data:/home/ubuntu
       - shared_data:/shared
@@ -232,17 +220,42 @@ services:
       - "6080:80"
       - "5900:5900"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # FastAPI - API SmartTech
-  # -------------------------------------
+  samba:
+    image: dperson/samba
+    container_name: smarttech_samba
+    hostname: smb.smarttech.local
+    environment:
+      - TZ=Africa/Dakar
+    command: >
+      -u "smbuser;smbPass123!"
+      -s "shared;/shared;yes;no;yes;all"
+    volumes:
+      - shared_data:/shared
+    networks:
+      services:
+        ipv4_address: 172.20.0.16
+    ports:
+      - "445:445"
+      - "139:139"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "smbstatus >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   fastapi:
     build: ./fastapi
     container_name: smarttech_fastapi
     hostname: api.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
     volumes:
       - ./fastapi:/app
       - fastapi_data:/app/data
@@ -258,42 +271,20 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
-  # -------------------------------------
-  # Samba - SMB
-  # -------------------------------------
-  samba:
-    image: dperson/samba
-    container_name: smarttech_samba
-    hostname: smb.smarttech.local
-    environment:
-      - TZ:Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
-    command: >
-      -u "smbuser;smbPass123!"
-      -s "shared;/shared;yes;no;yes;all"
-    volumes:
-      - shared_data:/shared
-    networks:
-      services:
-        ipv4_address: 172.20.0.16
-    ports:
-      - "445:445"
-      - "139:139"
-    restart: unless-stopped
-
-  # -------------------------------------
-  # PORTAL - Web Tailwind + Nginx
-  # -------------------------------------
   portal:
     build: ./portal
     container_name: smarttech_portal
     hostname: portal.smarttech.local
     environment:
       - TZ=Africa/Dakar
-      - DEBIAN_FRONTEND=noninteractive
     volumes:
-      - ./portal/index.html:/usr/share/nginx/html/index.html:ro
+      - ./portal:/usr/share/nginx/html:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.portal.rule=Host(`portal.smarttech.local`)"
@@ -306,3 +297,8 @@ services:
     ports:
       - "8081:80"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3

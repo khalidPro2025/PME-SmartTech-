@@ -15,7 +15,9 @@ RUN useradd -m -s /bin/bash ftpuser && \
 COPY vsftpd.conf /etc/vsftpd.conf
 COPY start.sh /usr/local/bin/start.sh
 
-RUN chmod +x /usr/local/bin/start.sh && \
+RUN mkdir -p /var/run/vsftpd/empty && \
+    chmod 755 /var/run/vsftpd/empty && \ 
+    chmod +x /usr/local/bin/start.sh && \
     chmod 755 /usr/local/bin/start.sh
 
 EXPOSE 21 30000-30010
