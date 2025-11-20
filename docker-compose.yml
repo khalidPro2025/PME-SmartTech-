@@ -162,7 +162,7 @@ services:
       retries: 3
 
   mail:
-    image: mailserver/docker-mailserver:latest
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: smarttech_mail
     hostname: mail.smarttech.local
     environment:
@@ -176,7 +176,9 @@ services:
     volumes:
       - mail_data:/var/mail
       - shared_data:/shared
-      - ./mail/config/:/tmp/docker-mailserver/:ro
+      - ./mail/config:/tmp/docker-mailserver
+      - ./mail/init-ssl.sh:/usr/local/bin/init-ssl.sh:ro
+    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/init-ssl.sh && /usr/local/bin/init-ssl.sh"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mail.rule=Host(`mail.smarttech.local`)"

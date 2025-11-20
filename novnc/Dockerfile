@@ -3,43 +3,28 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Africa/Dakar
 
-RUN ln -fs /usr/share/zoneinfo/Africa/Dakar /etc/localtime && \
-    apt-get update && \
-    apt-get install -y tzdata
+RUN apt-get update && apt-get install -y tzdata
 
-# --------------------------------------------------
-# INSTALLATION COMPONENTS
-# --------------------------------------------------
+# Install lightweight desktop
 RUN apt-get update && apt-get install -y \
-    xfce4 \
-    xfce4-terminal \
+    python3-xdg \
+    python3-gi \
+    openbox \
+    tint2 \
+    xterm \
     x11vnc \
     novnc \
     websockify \
-    firefox \
     xvfb \
+    firefox \
     dbus-x11 \
-    net-tools \
-    curl \
-    wget \
+    curl wget \
     && rm -rf /var/lib/apt/lists/*
 
-# --------------------------------------------------
-# DISABLE UPOWER + POWER MANAGER
-# --------------------------------------------------
-RUN apt-get remove -y upower xfce4-power-manager || true
-
-# --------------------------------------------------
-# CREATE USER
-# --------------------------------------------------
+# Create user
 RUN useradd -m -s /bin/bash ubuntu && \
-    echo "ubuntu:ubuntu" | chpasswd && \
-    mkdir -p /shared && \
-    chown ubuntu:ubuntu /home/ubuntu
+    echo "ubuntu:ubuntu" | chpasswd
 
-# --------------------------------------------------
-# VNC PASSWORD
-# --------------------------------------------------
 RUN mkdir -p /home/ubuntu/.vnc && \
     x11vnc -storepasswd "vncPass123!" /home/ubuntu/.vnc/passwd && \
     chown -R ubuntu:ubuntu /home/ubuntu/.vnc
